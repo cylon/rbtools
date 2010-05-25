@@ -25,11 +25,9 @@ except ImportError:
     from md5 import md5
 
 try:
-    # Specifically import json_loads, to work around some issues with
-    # installations containing incompatible modules named "json".
-    from json import loads as json_loads
+    import json
 except ImportError:
-    from simplejson import loads as json_loads
+    import simplejson as json
 
 # This specific import is necessary to handle the paths for
 # cygwin enabled machines.
@@ -548,7 +546,7 @@ class ReviewBoardServer(object):
         Loads in a JSON file and returns the data if successful. On failure,
         APIError is raised.
         """
-        rsp = json_loads(data)
+        rsp = json.loads(data)
 
         if rsp['stat'] == 'fail':
             self.process_error(200, data)
@@ -558,7 +556,7 @@ class ReviewBoardServer(object):
     def process_error(self, http_status, data):
         """Processes an error, raising an APIError with the information."""
         try:
-            rsp = json_loads(data)
+            rsp = json.loads(data)
 
             assert rsp['stat'] == 'fail'
 
@@ -1045,12 +1043,23 @@ class ClearCaseClient(SCMClient):
         """
         Performs a diff between 2 revisions of a CC repository.
         """
-        revs = revision_range.split(":")
-        return self.do_diff(revs)[0]
+        rev_str = ''
+
+        for rev in revision_range.split(":"):
+            rev_str += "-r %s " % rev
+
+        return self.do_diff(rev_str)
 
     def do_diff(self, params):
         # Diff returns "1" if differences were found.
         # Add the view name and view type to the description
+        if options.description:
+            options.description = ("VIEW: " + self.viewinfo +
+                "VIEWTYPE: " + self.viewtype + "\n" + options.description)
+        else:
+            options.description = (self.viewinfo +
+                "VIEWTYPE: " + self.viewtype + "\n")
+
         o = []
         Feol = False
         while len(params) > 0:
@@ -2140,7 +2149,8 @@ class GitClient(SCMClient):
         """
         upstream_branch = options.tracking or default_upstream_branch or \
                           'origin/master'
-        upstream_remote = upstream_branch.split('/')[0]
+        upstream_remote = options.remote or upstream_branch.split('/')[0]
+            
         origin_url = execute(["git", "config", "remote.%s.url" % upstream_remote],
                          ignore_errors=ignore_errors)
 
@@ -2678,6 +2688,11 @@ def parse_options(args):
                       metavar="TRACKING",
                       help="Tracking branch from which your branch is derived "
                            "(git only, defaults to origin/master)")
+    parser.add_option("--remote",
+                      dest="remote", default=None,
+                      metavar="REMOTE",
+                      help="The remote repository to use "
+                           "(git only, defaults to origin)")
     parser.add_option("--p4-client",
                       dest="p4_client", default=None,
                       help="the Perforce client name that the review is in")
